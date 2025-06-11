@@ -65,6 +65,7 @@ class AudioServer:
                     
                     if data.get("type") == "audio":
                         audio_data = data.get("data")
+                        logger.info(f"Received audio data of length: {len(audio_data) if audio_data else 0}")
                         
                         # Process audio for voice activity detection
                         should_trigger_playback = self.audio_processor.process_audio(audio_data)
@@ -72,19 +73,29 @@ class AudioServer:
                         # Store audio data for potential playback
                         self.audio_processor.store_audio_chunk(audio_data)
                         
+                        # Log current volume level
+                        current_volume = self.audio_processor.get_current_volume()
+                        logger.info(f"Current audio volume: {current_volume:.4f}")
+                        
                         # If voice activity drops below threshold, trigger playback
                         if should_trigger_playback and not self.is_processing:
                             self.is_processing = True
+                            logger.info("TRIGGERING PLAYBACK - Voice activity ended")
                             # Get stored audio and broadcast it back
                             stored_audio = self.audio_processor.get_stored_audio()
                             if stored_audio:
+                                logger.info(f"Broadcasting stored audio of length: {len(stored_audio)}")
                                 await self.broadcast_audio(stored_audio, websocket)
+                            else:
+                                logger.warning("No stored audio to broadcast")
                             
                             # Reset processing flag after a delay
                             threading.Timer(2.0, self.reset_processing_flag).start()
                         
                         # Also broadcast real-time audio to other clients
-                        await self.broadcast_audio(audio_data, websocket)
+                        if len(self.clients) > 1:
+                            logger.info(f"Broadcasting real-time audio to {len(self.clients)-1} other clients")
+                            await self.broadcast_audio(audio_data, websocket)
                         
                     elif data.get("type") == "ping":
                         # Respond to ping with pong

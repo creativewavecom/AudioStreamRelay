@@ -79,6 +79,8 @@ class AudioClient {
     
     async playReceivedAudio(base64AudioData) {
         try {
+            this.log(`Received audio data for playback, length: ${base64AudioData.length}`, 'info');
+            
             // Decode base64 audio data
             const audioData = atob(base64AudioData);
             const arrayBuffer = new ArrayBuffer(audioData.length);
@@ -87,6 +89,8 @@ class AudioClient {
             for (let i = 0; i < audioData.length; i++) {
                 uint8Array[i] = audioData.charCodeAt(i);
             }
+            
+            this.log('Audio data decoded, attempting playback...', 'info');
             
             // Create audio context if not exists
             if (!this.audioContext) {
@@ -102,10 +106,10 @@ class AudioClient {
             source.connect(this.audioContext.destination);
             source.start();
             
-            this.log('Playing received audio', 'success');
+            this.log('Audio playback started successfully', 'success');
             
         } catch (error) {
-            this.log('Error playing received audio', 'error');
+            this.log(`Audio playback error: ${error.message}`, 'error');
             console.error('Audio playback error:', error);
         }
     }
@@ -226,6 +230,8 @@ class AudioClient {
             // Convert blob to base64
             const arrayBuffer = await audioBlob.arrayBuffer();
             const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+            
+            this.log(`Sending audio chunk, size: ${audioBlob.size} bytes`, 'info');
             
             // Send audio data via WebSocket
             const message = {
