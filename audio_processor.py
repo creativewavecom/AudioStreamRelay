@@ -9,7 +9,7 @@ import time
 logger = logging.getLogger(__name__)
 
 class AudioProcessor:
-    def __init__(self, threshold=0.02, window_size=10, silence_duration=1.0):
+    def __init__(self, threshold=0.1, window_size=10, silence_duration=1.0):
         """
         Initialize audio processor with voice activity detection
         
@@ -38,13 +38,17 @@ class AudioProcessor:
             # Decode base64 audio data
             audio_bytes = base64.b64decode(base64_audio)
             
-            # Convert bytes to numpy array (assuming 16-bit PCM)
-            audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
+            # For WebM/Opus or WAV data, we can't directly convert to numpy
+            # Instead, we'll calculate volume based on the raw byte data
+            # This is a simplified approach for voice activity detection
             
-            # Normalize to float32 range [-1, 1]
-            normalized_audio = audio_array.astype(np.float32) / 32768.0
+            # Convert to numpy array of bytes for volume calculation
+            byte_array = np.frombuffer(audio_bytes, dtype=np.uint8)
             
-            return normalized_audio
+            # Convert to signed values for RMS calculation
+            signed_array = byte_array.astype(np.float32) - 128.0
+            
+            return signed_array
             
         except Exception as e:
             logger.error(f"Error decoding audio data: {e}")
@@ -57,7 +61,11 @@ class AudioProcessor:
         
         # Calculate RMS (Root Mean Square) volume
         rms = np.sqrt(np.mean(audio_data ** 2))
-        return float(rms)
+        
+        # Normalize the volume to a reasonable range (0-1)
+        normalized_volume = min(rms / 128.0, 1.0)
+        
+        return float(normalized_volume)
     
     def is_voice_active(self, volume):
         """Determine if voice is currently active based on volume"""
