@@ -9,7 +9,7 @@ import time
 logger = logging.getLogger(__name__)
 
 class AudioProcessor:
-    def __init__(self, threshold=0.1, window_size=10, silence_duration=1.0):
+    def __init__(self, threshold=0.3, window_size=10, silence_duration=1.0):
         """
         Initialize audio processor with voice activity detection
         
@@ -38,14 +38,13 @@ class AudioProcessor:
             # Decode base64 audio data
             audio_bytes = base64.b64decode(base64_audio)
             
-            # For WebM/Opus or WAV data, we can't directly convert to numpy
-            # Instead, we'll calculate volume based on the raw byte data
-            # This is a simplified approach for voice activity detection
+            # For WebM/Opus data, we'll use variance-based approach
+            # to detect actual voice activity vs background noise
             
-            # Convert to numpy array of bytes for volume calculation
+            # Convert to numpy array of bytes
             byte_array = np.frombuffer(audio_bytes, dtype=np.uint8)
             
-            # Convert to signed values for RMS calculation
+            # Convert to signed values centered around 0
             signed_array = byte_array.astype(np.float32) - 128.0
             
             return signed_array
@@ -55,15 +54,17 @@ class AudioProcessor:
             return None
     
     def calculate_volume(self, audio_data):
-        """Calculate RMS volume of audio data"""
+        """Calculate volume using variance to detect actual voice activity"""
         if audio_data is None or len(audio_data) == 0:
             return 0.0
         
-        # Calculate RMS (Root Mean Square) volume
-        rms = np.sqrt(np.mean(audio_data ** 2))
+        # Calculate variance instead of RMS to better detect voice activity
+        # Variance is more sensitive to actual signal changes vs constant noise
+        variance = float(np.var(audio_data))
         
-        # Normalize the volume to a reasonable range (0-1)
-        normalized_volume = min(rms / 128.0, 1.0)
+        # Normalize variance to a 0-1 range
+        # Use a smaller divisor to make it more sensitive
+        normalized_volume = min(variance / 1000.0, 1.0)
         
         return float(normalized_volume)
     
