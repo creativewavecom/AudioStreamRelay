@@ -26,3 +26,11 @@ waitForPort = 5000
 
 [deployment]
 run = ["sh", "-c", "pip install asyncio websockets numpy && python server.py"]
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
