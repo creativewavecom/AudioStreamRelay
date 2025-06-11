@@ -1,0 +1,28 @@
+modules = ["python-3.11"]
+
+[nix]
+channel = "stable-24_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Audio Server"
+
+[[workflows.workflow]]
+name = "Audio Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install asyncio websockets numpy && python server.py"
+waitForPort = 5000
+
+[deployment]
+run = ["sh", "-c", "pip install asyncio websockets numpy && python server.py"]

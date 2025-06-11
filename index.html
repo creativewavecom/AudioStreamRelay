@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Audio Communication</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Real-time Audio Communication</h1>
+            <p>Voice Activity Detection & Audio Streaming</p>
+        </header>
+        
+        <main>
+            <div class="status-panel">
+                <div class="status-item">
+                    <span class="label">Connection:</span>
+                    <span id="connection-status" class="status-value disconnected">Disconnected</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">Microphone:</span>
+                    <span id="mic-status" class="status-value inactive">Inactive</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">Audio Level:</span>
+                    <div class="audio-level-container">
+                        <div id="audio-level" class="audio-level-bar"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button id="start-btn" class="btn btn-primary">Start Audio</button>
+                <button id="stop-btn" class="btn btn-secondary" disabled>Stop Audio</button>
+            </div>
+            
+            <div class="info-panel">
+                <h3>How it works:</h3>
+                <ul>
+                    <li>Click "Start Audio" to begin microphone streaming</li>
+                    <li>Speak into your microphone - audio is sent to the server</li>
+                    <li>When you stop speaking, the server detects silence and plays back stored audio</li>
+                    <li>Multiple clients can connect for real-time audio communication</li>
+                </ul>
+            </div>
+            
+            <div id="log-panel" class="log-panel">
+                <h3>Activity Log:</h3>
+                <div id="log-content"></div>
+            </div>
+        </main>
+    </div>
+    
+    <script src="static/client.js"></script>
+</body>
+</html>
