@@ -143,20 +143,18 @@ async def main():
     
     def run_http_server():
         port = 5000
-        max_attempts = 10
-        for attempt in range(max_attempts):
-            try:
-                with socketserver.TCPServer(("0.0.0.0", port), CustomHTTPRequestHandler) as httpd:
-                    logger.info(f"HTTP server started on http://0.0.0.0:{port}")
-                    httpd.serve_forever()
-                break
-            except OSError as e:
-                if e.errno == 98:  # Address already in use
-                    port += 1
-                    logger.info(f"Port {port-1} in use, trying port {port}")
-                    continue
-                else:
-                    raise
+        try:
+            httpd = socketserver.TCPServer(("0.0.0.0", port), CustomHTTPRequestHandler)
+            httpd.allow_reuse_address = True
+            logger.info(f"HTTP server started on http://0.0.0.0:{port}")
+            httpd.serve_forever()
+        except OSError as e:
+            if e.errno == 98:  # Address already in use
+                logger.error(f"Port {port} is already in use. Please free the port and restart.")
+                raise
+            else:
+                logger.error(f"Failed to start HTTP server: {e}")
+                raise
     
     # Start HTTP server in background thread
     http_thread = threading.Thread(target=run_http_server, daemon=True)

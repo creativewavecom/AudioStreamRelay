@@ -1,4 +1,4 @@
-modules = ["python-3.11"]
+modules = ["python-3.11", "nodejs-20", "web"]
 
 [nix]
 channel = "stable-24_05"
@@ -30,6 +30,18 @@ run = ["sh", "-c", "pip install asyncio websockets numpy && python server.py"]
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 5001
+externalPort = 3000
+
+[[ports]]
+localPort = 5002
+externalPort = 3001
+
+[[ports]]
+localPort = 5003
+externalPort = 3002
 
 [[ports]]
 localPort = 8000
