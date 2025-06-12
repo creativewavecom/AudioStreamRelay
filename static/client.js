@@ -153,42 +153,69 @@ class AudioClient {
                 uint8Array[i] = audioData.charCodeAt(i);
             }
             
-            // Create blob with WebM format
-            const audioBlob = new Blob([uint8Array], { type: 'audio/webm' });
-            const audioUrl = URL.createObjectURL(audioBlob);
+            // Try different MIME types for better compatibility
+            const mimeTypes = ['audio/wav', 'audio/webm', 'audio/mp4', 'audio/ogg', 'audio/mpeg'];
             
-            // Create audio element and play
-            const audioElement = new Audio(audioUrl);
-            audioElement.volume = 0.8;
+            for (const mimeType of mimeTypes) {
+                try {
+                    const audioBlob = new Blob([uint8Array], { type: mimeType });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    
+                    const audioElement = new Audio(audioUrl);
+                    audioElement.volume = 0.8;
+                    
+                    const playPromise = new Promise((resolve, reject) => {
+                        let resolved = false;
+                        
+                        const cleanup = () => {
+                            if (!resolved) {
+                                resolved = true;
+                                URL.revokeObjectURL(audioUrl);
+                                resolve();
+                            }
+                        };
+                        
+                        audioElement.onloadeddata = () => {
+                            if (isFirst) {
+                                this.log(`Successfully loaded audio with ${mimeType}`, 'success');
+                            }
+                        };
+                        
+                        audioElement.onended = cleanup;
+                        audioElement.onerror = cleanup;
+                        
+                        audioElement.oncanplaythrough = () => {
+                            audioElement.play()
+                                .then(() => {
+                                    if (isFirst) {
+                                        this.log('Audio playback started successfully!', 'success');
+                                    }
+                                })
+                                .catch(cleanup);
+                        };
+                        
+                        // Fallback timeout
+                        setTimeout(cleanup, 3000);
+                    });
+                    
+                    await playPromise;
+                    return; // Success, exit the function
+                    
+                } catch (error) {
+                    // Try next MIME type
+                    continue;
+                }
+            }
             
-            return new Promise((resolve, reject) => {
-                audioElement.onended = () => {
-                    URL.revokeObjectURL(audioUrl);
-                    resolve();
-                };
-                
-                audioElement.onerror = (error) => {
-                    URL.revokeObjectURL(audioUrl);
-                    if (isFirst) {
-                        this.log(`Audio chunk playback error: ${error.message || 'Format not supported'}`, 'warning');
-                    }
-                    resolve(); // Continue to next chunk even if this one fails
-                };
-                
-                audioElement.oncanplay = () => {
-                    audioElement.play().catch(() => resolve());
-                };
-                
-                // Fallback timeout
-                setTimeout(() => {
-                    URL.revokeObjectURL(audioUrl);
-                    resolve();
-                }, 2000);
-            });
+            // If all MIME types failed
+            if (isFirst) {
+                this.log('Unable to play audio - format not supported', 'warning');
+            }
             
         } catch (error) {
-            // Silently continue to next chunk
-            return Promise.resolve();
+            if (isFirst) {
+                this.log(`Audio playback error: ${error.message}`, 'error');
+            }
         }
     }
     
