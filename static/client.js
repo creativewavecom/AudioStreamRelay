@@ -68,6 +68,8 @@ class AudioClient {
             
             if (message.type === 'audio') {
                 this.playReceivedAudio(message.data);
+            } else if (message.type === 'playback') {
+                this.playRecordedAudio(message.chunks);
             } else if (message.type === 'pong') {
                 this.log('Received pong from server', 'info');
             }
@@ -118,6 +120,75 @@ class AudioClient {
         } catch (error) {
             this.log(`Audio playback error: ${error.message}`, 'error');
             console.error('Audio playback error:', error);
+        }
+    }
+    
+    async playRecordedAudio(audioChunks) {
+        try {
+            this.log(`Playing recorded audio with ${audioChunks.length} chunks`, 'success');
+            
+            // Play each chunk sequentially with slight delays
+            for (let i = 0; i < audioChunks.length; i++) {
+                await this.playAudioChunk(audioChunks[i], i === 0);
+                // Small delay between chunks to create continuous playback
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            
+            this.log('All recorded audio chunks played', 'success');
+            
+        } catch (error) {
+            this.log(`Recorded audio playback error: ${error.message}`, 'error');
+            console.error('Recorded audio playback error:', error);
+        }
+    }
+    
+    async playAudioChunk(base64Chunk, isFirst = false) {
+        try {
+            // Create blob from base64 data
+            const audioData = atob(base64Chunk);
+            const arrayBuffer = new ArrayBuffer(audioData.length);
+            const uint8Array = new Uint8Array(arrayBuffer);
+            
+            for (let i = 0; i < audioData.length; i++) {
+                uint8Array[i] = audioData.charCodeAt(i);
+            }
+            
+            // Create blob with WebM format
+            const audioBlob = new Blob([uint8Array], { type: 'audio/webm' });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            
+            // Create audio element and play
+            const audioElement = new Audio(audioUrl);
+            audioElement.volume = 0.8;
+            
+            return new Promise((resolve, reject) => {
+                audioElement.onended = () => {
+                    URL.revokeObjectURL(audioUrl);
+                    resolve();
+                };
+                
+                audioElement.onerror = (error) => {
+                    URL.revokeObjectURL(audioUrl);
+                    if (isFirst) {
+                        this.log(`Audio chunk playback error: ${error.message || 'Format not supported'}`, 'warning');
+                    }
+                    resolve(); // Continue to next chunk even if this one fails
+                };
+                
+                audioElement.oncanplay = () => {
+                    audioElement.play().catch(() => resolve());
+                };
+                
+                // Fallback timeout
+                setTimeout(() => {
+                    URL.revokeObjectURL(audioUrl);
+                    resolve();
+                }, 2000);
+            });
+            
+        } catch (error) {
+            // Silently continue to next chunk
+            return Promise.resolve();
         }
     }
     
@@ -202,21 +273,57 @@ class AudioClient {
     }
     
     startRecording() {
-        const options = {
-            mimeType: 'audio/webm;codecs=opus',
-            audioBitsPerSecond: 16000
-        };
+        // Try different formats for better compatibility
+        const formats = [
+            'audio/wav',
+            'audio/webm;codecs=opus',
+            'audio/mp4',
+            'audio/ogg'
+        ];
         
-        // Fallback for browsers that don't support webm
-        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-            options.mimeType = 'audio/wav';
+        let selectedFormat = null;
+        for (const format of formats) {
+            if (MediaRecorder.isTypeSupported(format)) {
+                selectedFormat = format;
+                break;
+            }
         }
         
-        this.mediaRecorder = new MediaRecorder(this.mediaStream, options);
+        if (!selectedFormat) {
+            this.log('No supported audio format found', 'error');
+            return;
+        }
+        
+        this.log(`Using audio format: ${selectedFormat}`, 'info');
+        
+        this.mediaRecorder = new MediaRecorder(this.mediaStream, {
+            mimeType: selectedFormat,
+            audioBitsPerSecond: 16000
+        });
+        
+        let recordingChunks = [];
         
         this.mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0 && this.websocket.readyState === WebSocket.OPEN) {
-                this.sendAudioData(event.data);
+            if (event.data.size > 0) {
+                recordingChunks.push(event.data);
+            }
+        };
+        
+        this.mediaRecorder.onstop = () => {
+            if (recordingChunks.length > 0) {
+                // Create complete audio blob
+                const completeBlob = new Blob(recordingChunks, { type: selectedFormat });
+                this.sendAudioData(completeBlob);
+                recordingChunks = [];
+            }
+            
+            // Restart recording if still active
+            if (this.isRecording) {
+                setTimeout(() => {
+                    if (this.isRecording && this.mediaRecorder.state === 'inactive') {
+                        this.mediaRecorder.start();
+                    }
+                }, 50);
             }
         };
         
@@ -225,11 +332,18 @@ class AudioClient {
             console.error('MediaRecorder error:', error);
         };
         
-        // Start recording with small time slices for real-time streaming
-        this.mediaRecorder.start(100); // 100ms chunks
+        // Start recording - will create complete files every 500ms
+        this.mediaRecorder.start();
         this.isRecording = true;
         
-        this.log('Started audio recording and streaming', 'success');
+        // Stop and restart every 500ms to create complete audio files
+        this.recordingInterval = setInterval(() => {
+            if (this.isRecording && this.mediaRecorder.state === 'recording') {
+                this.mediaRecorder.stop();
+            }
+        }, 500);
+        
+        this.log('Started audio recording with 500ms complete files', 'success');
     }
     
     async sendAudioData(audioBlob) {
@@ -257,6 +371,14 @@ class AudioClient {
     stopAudio() {
         this.log('Stopping audio recording...', 'info');
         
+        this.isRecording = false;
+        
+        // Clear recording interval
+        if (this.recordingInterval) {
+            clearInterval(this.recordingInterval);
+            this.recordingInterval = null;
+        }
+        
         // Stop recording
         if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
             this.mediaRecorder.stop();
@@ -273,8 +395,6 @@ class AudioClient {
             this.audioContext.close();
             this.audioContext = null;
         }
-        
-        this.isRecording = false;
         
         // Update UI
         this.updateMicrophoneStatus(false);

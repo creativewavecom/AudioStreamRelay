@@ -54,6 +54,25 @@ class AudioServer:
         for client in disconnected_clients:
             await self.unregister_client(client)
     
+    async def broadcast_playback(self, playback_message, sender_websocket):
+        """Broadcast playback message to all clients including sender"""
+        if not self.clients:
+            return
+            
+        disconnected_clients = set()
+        for client in self.clients:
+            try:
+                await client.send(json.dumps(playback_message))
+            except websockets.exceptions.ConnectionClosed:
+                disconnected_clients.add(client)
+            except Exception as e:
+                logger.error(f"Error broadcasting playback to client: {e}")
+                disconnected_clients.add(client)
+        
+        # Remove disconnected clients
+        for client in disconnected_clients:
+            await self.unregister_client(client)
+    
     async def handle_client(self, websocket):
         """Handle individual client connections"""
         await self.register_client(websocket)
@@ -79,15 +98,16 @@ class AudioServer:
                             self.is_processing = True
                             logger.info("TRIGGERING PLAYBACK - 5 second recording period ended")
                             
-                            # Get all stored audio chunks and broadcast them
+                            # Get all stored audio chunks and broadcast them as one message
                             stored_audio_chunks = self.audio_processor.get_stored_audio()
                             if stored_audio_chunks:
-                                logger.info(f"Broadcasting {len(stored_audio_chunks)} stored audio chunks")
-                                # Send each stored chunk as separate audio message
-                                for i, chunk in enumerate(stored_audio_chunks):
-                                    await self.broadcast_audio(chunk, websocket)
-                                    # Small delay between chunks to maintain timing
-                                    await asyncio.sleep(0.1)
+                                logger.info(f"Broadcasting {len(stored_audio_chunks)} stored audio chunks as single playback")
+                                # Send all chunks as a single playback message
+                                playback_message = {
+                                    "type": "playback",
+                                    "chunks": stored_audio_chunks
+                                }
+                                await self.broadcast_playback(playback_message, websocket)
                             else:
                                 logger.warning("No stored audio to broadcast")
                             
