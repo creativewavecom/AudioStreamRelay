@@ -81,7 +81,7 @@ class AudioClient {
         try {
             this.log(`Received audio data for playback, length: ${base64AudioData.length}`, 'info');
             
-            // Decode base64 audio data
+            // Create blob from base64 data
             const audioData = atob(base64AudioData);
             const arrayBuffer = new ArrayBuffer(audioData.length);
             const uint8Array = new Uint8Array(arrayBuffer);
@@ -90,22 +90,29 @@ class AudioClient {
                 uint8Array[i] = audioData.charCodeAt(i);
             }
             
-            this.log('Audio data decoded, attempting playback...', 'info');
+            // Create blob with WebM format
+            const audioBlob = new Blob([uint8Array], { type: 'audio/webm' });
+            const audioUrl = URL.createObjectURL(audioBlob);
             
-            // Create audio context if not exists
-            if (!this.audioContext) {
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
+            // Create audio element and play
+            const audioElement = new Audio(audioUrl);
+            audioElement.volume = 0.8;
             
-            // Decode audio data
-            const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            audioElement.onloadeddata = () => {
+                this.log('Audio loaded successfully, starting playback...', 'success');
+            };
             
-            // Create and play audio source
-            const source = this.audioContext.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(this.audioContext.destination);
-            source.start();
+            audioElement.onended = () => {
+                URL.revokeObjectURL(audioUrl);
+                this.log('Audio playback completed', 'info');
+            };
             
+            audioElement.onerror = (error) => {
+                URL.revokeObjectURL(audioUrl);
+                this.log(`Audio playback error: ${error.message || 'Unknown error'}`, 'error');
+            };
+            
+            await audioElement.play();
             this.log('Audio playback started successfully', 'success');
             
         } catch (error) {

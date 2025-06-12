@@ -67,35 +67,32 @@ class AudioServer:
                         audio_data = data.get("data")
                         logger.info(f"Received audio data of length: {len(audio_data) if audio_data else 0}")
                         
-                        # Process audio for voice activity detection
+                        # Process audio for timed recording/playback cycle
                         should_trigger_playback = self.audio_processor.process_audio(audio_data)
                         
-                        # Store audio data for potential playback
-                        self.audio_processor.store_audio_chunk(audio_data)
+                        # Log current phase (recording/playback)
+                        phase = "Recording" if self.audio_processor.is_recording else "Playback"
+                        logger.info(f"Current phase: {phase}")
                         
-                        # Log current volume level
-                        current_volume = self.audio_processor.get_current_volume()
-                        logger.info(f"Current audio volume: {current_volume:.4f}")
-                        
-                        # If voice activity drops below threshold, trigger playback
+                        # If switching to playback phase, broadcast stored audio
                         if should_trigger_playback and not self.is_processing:
                             self.is_processing = True
-                            logger.info("TRIGGERING PLAYBACK - Voice activity ended")
-                            # Get stored audio and broadcast it back
-                            stored_audio = self.audio_processor.get_stored_audio()
-                            if stored_audio:
-                                logger.info(f"Broadcasting stored audio of length: {len(stored_audio)}")
-                                await self.broadcast_audio(stored_audio, websocket)
+                            logger.info("TRIGGERING PLAYBACK - 5 second recording period ended")
+                            
+                            # Get all stored audio chunks and broadcast them
+                            stored_audio_chunks = self.audio_processor.get_stored_audio()
+                            if stored_audio_chunks:
+                                logger.info(f"Broadcasting {len(stored_audio_chunks)} stored audio chunks")
+                                # Send each stored chunk as separate audio message
+                                for i, chunk in enumerate(stored_audio_chunks):
+                                    await self.broadcast_audio(chunk, websocket)
+                                    # Small delay between chunks to maintain timing
+                                    await asyncio.sleep(0.1)
                             else:
                                 logger.warning("No stored audio to broadcast")
                             
-                            # Reset processing flag after a delay
-                            threading.Timer(2.0, self.reset_processing_flag).start()
-                        
-                        # Also broadcast real-time audio to other clients
-                        if len(self.clients) > 1:
-                            logger.info(f"Broadcasting real-time audio to {len(self.clients)-1} other clients")
-                            await self.broadcast_audio(audio_data, websocket)
+                            # Reset processing flag after playback duration
+                            threading.Timer(5.0, self.reset_processing_flag).start()
                         
                     elif data.get("type") == "ping":
                         # Respond to ping with pong
